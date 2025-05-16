@@ -1,0 +1,106 @@
+
+
+addpath('functions/BOED')
+addpath('functions/DA')
+addpath('functions/IMR simulation')
+addpath('functions/RBF')
+
+
+%% Set up parallel enviroment
+
+% poolobj = parpool('Processes', 128);
+% fprintf('Number of workers: %g\n', poolobj.NumWorkers);
+
+
+%%  Initialize the prior distribution
+%%%%%%%%%%%%%%%%%%%%%%---Model 1: NHKV----%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+P_prior_1.mu      =  [15090 0.209 0 6];
+P_prior_1.sigma   =  ([4350 0 0 0; 0 0.1 0 0; 0 0 0 0; 0 0 0 0]).^2;
+model_prob_1      =  1/5;
+Model_1_prior     =  {'NeoHook', 'G, mu, alpha', P_prior_1, model_prob_1};
+%%%%%%%%%%%%%%%%%%%%%%%---Model 2: qKV----%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+P_prior_2.mu      =  [2770 0.286 0.28 0];
+P_prior_2.sigma   =  ([300 0 0 0; 0 0.14 0 0; 0 0 0.48 0; 0 0 0 0]).^2;
+model_prob_2      =  1/5;
+Model_2_prior     =  {'fung', 'G_inf, mu, alpha', P_prior_2, model_prob_2};
+%%%%%%%%%%%%%%%%%%%%%%---Model 3: LKV----%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+P_prior_3.mu      =  [15090 0.209 0 6];
+P_prior_3.sigma   =  ([4350 0 0 0; 0 0.1 0 0; 0 0 0 0; 0 0 0 0]).^2;
+model_prob_3      =  1/5;
+Model_3_prior     =  {'linkv', 'G, mu, alpha', P_prior_1, model_prob_1};
+%%%%%%%%%%%%%%%%%%%%%%---Model 4: SLS----%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+P_prior_4.mu      =  [15090 0.209 0 6];
+P_prior_4.sigma   =  ([4350 0 0 0; 0 0.1 0 0; 0 0 0 0; 0 0 0 2]).^2;
+model_prob_4      =  1/5;
+Model_4_prior     =  {'sls', 'G, mu, alpha', P_prior_4, model_prob_4};
+%%%%%%%%%%%%%%%%%%%%%%---Model 5: NHSS----%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+P_prior_5.mu      =  [15090 0.209 0 6];
+P_prior_5.sigma   =  ([4350 0 0 0; 0 0.1 0 0; 0 0 0 0; 0 0 0 2]).^2;
+model_prob_5      =  1/5;
+Model_5_prior     =  {'nhzen', 'G, mu, alpha', P_prior_5, model_prob_5};
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Model_design      =  {Model_1_prior; Model_2_prior; Model_3_prior; Model_4_prior; Model_5_prior};
+
+
+%% Generate data
+
+
+mkdir('data_multimodels/')
+
+N_target = 2.5e3;
+
+
+design_available = [833 0.28; 475 0.26; 111 0.25; 794 0.14; 448 0.18; 180 0.21;...
+    204 0.25; 803 0.23; 250 0.15; 600 0.21; 1000 0.23; ...
+      300 0.29; 350 0.14; 650 0.18; 900 0.17];
+
+
+for j = 12:15
+
+     % Design = [1000 0.23];
+
+     Design = design_available(j,:);
+
+    % rng(234)
+    % 
+    %  Design = [unifrnd(100,1000,[1 1]) unifrnd(0.14,0.3,[1 1])];
+    % 
+    save_path = ['We',num2str(round(Design(1)),'%i'),'_Req', ...
+        num2str(Design(2),'%.2f')];
+
+    mkdir(['data_multimodels/' save_path])
+
+    disp(['Design at ' save_path])
+
+    for i = 1:5
+
+        Model_prior = Model_design{i};
+
+        model_true = Model_prior{1};
+
+        mu_theta = Model_prior{3}.mu;
+
+        sigma_theta = Model_prior{3}.sigma;
+
+        theta_target =  mvnrnd(mu_theta,sigma_theta,N_target);
+
+        disp(['Generating Rt data for model: ' model_true])
+
+        tic
+
+        [t,y2,U2,dt] = IMR_simulations(theta_target,Design,model_true,60);
+
+        toc
+
+        % plot(t,y2,'-'); hold on; drawnow;
+
+        data = {y2,theta_target};
+        %
+        data_filename =  ['data_multimodels/', save_path '/' model_true,'_2.mat']; % name of file containing R vs T data
+
+        save(data_filename,'data','-v7.3')
+
+    end
+ 
+
+end
